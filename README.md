@@ -20,15 +20,6 @@ Or download and run locally:
 
 - Modifies the registry key: `HKEY_CURRENT_USER\Software\DownloadManager`
 - Changes the `CheckUpdtVM` value from `1` to `0`
-- Creates a backup file before making changes
-- Provides clear feedback on the operation status
-
-## ⚠️ Important Safety Information
-
-### Before Running:
-1. **Close IDM completely** before running the script
-2. **Create a system restore point** (recommended for extra safety)
-3. **Run PowerShell as Administrator** for proper registry access
 
 ### What to Expect:
 - The script creates a backup file with timestamp
@@ -91,26 +82,9 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 - A backup is created before any changes
 - The script runs in user context (HKCU), not system-wide
 
-## 📝 What Gets Modified
-
-| Registry Location | Value Name | Original Value | New Value |
-|------------------|------------|----------------|-----------|
-| `HKCU:\Software\DownloadManager` | `CheckUpdtVM` | `1` | `0` |
-
-## 🎯 Tested On
-
-- Windows 10/11
-- IDM versions 6.x
-- PowerShell 5.1 and PowerShell 7+
-
 ## 📄 License
 
 This project is provided "as-is" for educational and personal use. Use at your own risk.
-
-## 🤝 Contributing
-
-Feel free to open issues or submit pull requests if you have improvements or encounter problems.
-
 ---
 
 **Disclaimer:** This tool modifies Windows registry. While it only changes IDM-specific settings and creates backups, please ensure you understand the risks before use. The author is not responsible for any issues that may arise from using this script.
