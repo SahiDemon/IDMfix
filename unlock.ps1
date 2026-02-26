@@ -1,4 +1,4 @@
-$pass = Read-Host "Enter password"
+$pass = Read-Host "Enter password to restore system"
 
 if ($pass -ne "SorrySahindu") {
     Write-Host "Wrong password."
@@ -15,7 +15,7 @@ if (Test-Path "$base\backup.txt") {
 }
 
 # Remove tasks
-"WinGuard","WinGuard-Heal","WinGuard-Notice" | % {
+"WinGuard","WinGuard-Heal","WinGuard-Notice" | ForEach-Object {
     Unregister-ScheduledTask -TaskName $_ -Confirm:$false -ErrorAction SilentlyContinue
 }
 
