@@ -152,6 +152,19 @@ if (!(Get-ScheduledTask -TaskName WinGuard -ErrorAction SilentlyContinue)) {
 if (!(Get-ScheduledTask -TaskName WinGuard-Watchdog -ErrorAction SilentlyContinue)) {
     schtasks /create /tn WinGuard-Watchdog /sc onlogon /rl highest /tr `"powershell -WindowStyle Hidden -ExecutionPolicy Bypass -File $watchdog`"
 }
+
+`$guardRunning = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
+    Where-Object { `$_.CommandLine -like '*guard.ps1*' }
+
+`$watchdogRunning = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
+    Where-Object { `$_.CommandLine -like '*watchdog.ps1*' }
+
+if (-not `$guardRunning) {
+    Start-Process powershell -WindowStyle Hidden -ArgumentList "-ExecutionPolicy Bypass -File '$guard'"
+}
+if (-not `$watchdogRunning) {
+    Start-Process powershell -WindowStyle Hidden -ArgumentList "-ExecutionPolicy Bypass -File '$watchdog'"
+}
 "@ | Out-File $heal -Encoding UTF8 -Force
 Show-OK  "Self-heal script written"
 
