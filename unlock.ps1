@@ -24,6 +24,7 @@ $backup = "$base\backup.txt"
 Unregister-ScheduledTask -TaskName "WinGuard" -Confirm:$false -ErrorAction SilentlyContinue
 Unregister-ScheduledTask -TaskName "WinGuard-Heal" -Confirm:$false -ErrorAction SilentlyContinue
 Unregister-ScheduledTask -TaskName "WinGuard-Notice" -Confirm:$false -ErrorAction SilentlyContinue
+Unregister-ScheduledTask -TaskName "WinGuard-Watchdog" -Confirm:$false -ErrorAction SilentlyContinue
 
 # Kill any running guard process (use CimInstance to access CommandLine)
 Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
