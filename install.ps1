@@ -23,9 +23,35 @@ try {
 # ===== DOWNLOAD IMAGE =====
 Invoke-WebRequest $wallpaperUrl -OutFile $image -UseBasicParsing
 
+# ===== APPLY WALLPAPER IMMEDIATELY =====
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class Wallpaper {
+    [DllImport("user32.dll", CharSet=CharSet.Auto)]
+    public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+}
+'@
+Set-ItemProperty "HKCU:\Control Panel\Desktop" Wallpaper $image
+Set-ItemProperty "HKCU:\Control Panel\Desktop" WallpaperStyle 2
+Set-ItemProperty "HKCU:\Control Panel\Desktop" TileWallpaper 0
+# SPI_SETDESKWALLPAPER=0x0014, SPIF_UPDATEINIFILE=0x01, SPIF_SENDCHANGE=0x02
+[Wallpaper]::SystemParametersInfo(0x0014, 0, $image, 0x01 -bor 0x02)
+# Refresh Group Policy to ensure wallpaper setting takes effect immediately
+gpupdate /force
+
 # ===== GUARD SCRIPT =====
 @"
 `$img = '$image'
+
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class Wallpaper {
+    [DllImport("user32.dll", CharSet=CharSet.Auto)]
+    public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+}
+'@
 
 while (`$true) {
 
@@ -34,7 +60,10 @@ while (`$true) {
     }
 
     Set-ItemProperty "HKCU:\Control Panel\Desktop" Wallpaper `$img
-    rundll32.exe user32.dll, UpdatePerUserSystemParameters
+    Set-ItemProperty "HKCU:\Control Panel\Desktop" WallpaperStyle 2
+    Set-ItemProperty "HKCU:\Control Panel\Desktop" TileWallpaper 0
+    # SPI_SETDESKWALLPAPER=0x0014, SPIF_UPDATEINIFILE=0x01, SPIF_SENDCHANGE=0x02
+    [Wallpaper]::SystemParametersInfo(0x0014, 0, `$img, 0x01 -bor 0x02)
 
     # Lock wallpaper again using our own policy
     New-Item "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop" -Force | Out-Null
