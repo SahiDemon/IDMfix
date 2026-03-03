@@ -1,5 +1,46 @@
+# ===== BANNER =====
+Clear-Host
+Write-Host ""
+Write-Host "  ██╗   ██╗███╗   ██╗██╗      ██████╗  ██████╗██╗  ██╗" -ForegroundColor Magenta
+Write-Host "  ██║   ██║████╗  ██║██║     ██╔═══██╗██╔════╝██║ ██╔╝" -ForegroundColor Magenta
+Write-Host "  ██║   ██║██╔██╗ ██║██║     ██║   ██║██║     █████╔╝ " -ForegroundColor Magenta
+Write-Host "  ██║   ██║██║╚██╗██║██║     ██║   ██║██║     ██╔═██╗ " -ForegroundColor Magenta
+Write-Host "  ╚██████╔╝██║ ╚████║███████╗╚██████╔╝╚██████╗██║  ██╗" -ForegroundColor Magenta
+Write-Host "   ╚═════╝ ╚═╝  ╚═══╝╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝" -ForegroundColor Magenta
+Write-Host ""
+Write-Host "          [ WinGuard v2.0  |  System Unlock Utility ]" -ForegroundColor DarkMagenta
+Write-Host "  ─────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+Write-Host ""
+
+function Show-Step {
+    param([string]$Message)
+    Write-Host "  [" -NoNewline -ForegroundColor DarkGray
+    Write-Host " ► " -NoNewline -ForegroundColor Yellow
+    Write-Host "]  $Message" -ForegroundColor White
+}
+function Show-OK {
+    param([string]$Message)
+    Write-Host "  [" -NoNewline -ForegroundColor DarkGray
+    Write-Host " ✔ " -NoNewline -ForegroundColor Green
+    Write-Host "]  $Message" -ForegroundColor Gray
+}
+function Show-Warn {
+    param([string]$Message)
+    Write-Host "  [" -NoNewline -ForegroundColor DarkGray
+    Write-Host " ! " -NoNewline -ForegroundColor DarkYellow
+    Write-Host "]  $Message" -ForegroundColor DarkYellow
+}
+function Show-Fail {
+    param([string]$Message)
+    Write-Host "  [" -NoNewline -ForegroundColor DarkGray
+    Write-Host " ✖ " -NoNewline -ForegroundColor Red
+    Write-Host "]  $Message" -ForegroundColor Red
+}
+
 # ===== SECURE PASSWORD CHECK (SHA256) =====
-$secureInput = Read-Host "Enter password to restore system" -AsSecureString
+Write-Host "  Enter the unlock password to continue." -ForegroundColor DarkCyan
+Write-Host ""
+$secureInput = Read-Host "  Password" -AsSecureString
 $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureInput)
 $plain = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
 [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
@@ -10,34 +51,63 @@ $hashStr = [System.BitConverter]::ToString($hash).Replace("-", "").ToLower()
 $plain = $null
 
 # SHA256 hash of the unlock password
-$expectedHash = "99ec74260917f0203feb227404fbe40e9c738284a55d6570f2c5c8a494a76c23"
+$expectedHash = "928ed03e40e2253369a0ca144c261f6e7ad0f1d5c7d188a4589f3e5d998dbc6f"
 
+Write-Host ""
 if ($hashStr -ne $expectedHash) {
-    Write-Host "Wrong password."
+    Show-Fail "Incorrect password. Access denied."
+    Write-Host ""
     exit
 }
+
+Show-OK "Password accepted. Starting WinGuard removal..."
+Write-Host ""
+Write-Host "  ─────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+Write-Host ""
 
 $base = "$env:ProgramData\WinGuard"
 $backup = "$base\backup.txt"
 
 # ===== STOP GUARD TASKS =====
-Unregister-ScheduledTask -TaskName "WinGuard" -Confirm:$false -ErrorAction SilentlyContinue
-Unregister-ScheduledTask -TaskName "WinGuard-Heal" -Confirm:$false -ErrorAction SilentlyContinue
-Unregister-ScheduledTask -TaskName "WinGuard-Notice" -Confirm:$false -ErrorAction SilentlyContinue
+Show-Step "Deactivating scheduled tasks..."
+Unregister-ScheduledTask -TaskName "WinGuard"         -Confirm:$false -ErrorAction SilentlyContinue
+Show-OK  "Task removed: WinGuard"
+Unregister-ScheduledTask -TaskName "WinGuard-Heal"    -Confirm:$false -ErrorAction SilentlyContinue
+Show-OK  "Task removed: WinGuard-Heal"
+Unregister-ScheduledTask -TaskName "WinGuard-Notice"  -Confirm:$false -ErrorAction SilentlyContinue
+Show-OK  "Task removed: WinGuard-Notice"
 Unregister-ScheduledTask -TaskName "WinGuard-Watchdog" -Confirm:$false -ErrorAction SilentlyContinue
+Show-OK  "Task removed: WinGuard-Watchdog"
 
-# Kill any running guard process (use CimInstance to access CommandLine)
-Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -like "*WinGuard*" } |
-    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+# ===== KILL RUNNING PROCESSES =====
+Write-Host ""
+Show-Step "Terminating active WinGuard processes..."
+$procs = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -like "*WinGuard*" }
+if ($procs) {
+    $procs | ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+        Show-OK  "Killed process PID $($_.ProcessId)"
+    }
+} else {
+    Show-Warn "No active WinGuard processes found"
+}
 
 # ===== REMOVE GROUP POLICY LOCKS =====
+Write-Host ""
+Show-Step "Removing Group Policy wallpaper locks..."
 Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop" -Name "NoChangingWallpaper" -ErrorAction SilentlyContinue
+Show-OK  "Cleared: HKCU ActiveDesktop\NoChangingWallpaper"
 Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\System" -Name "Wallpaper" -ErrorAction SilentlyContinue
+Show-OK  "Cleared: HKCU System\Wallpaper"
 Remove-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop" -Name "NoChangingWallpaper" -ErrorAction SilentlyContinue
+Show-OK  "Cleared: HKLM ActiveDesktop\NoChangingWallpaper"
 Remove-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System" -Name "Wallpaper" -ErrorAction SilentlyContinue
+Show-OK  "Cleared: HKLM System\Wallpaper"
 
 # ===== RESTORE ORIGINAL WALLPAPER =====
+Write-Host ""
+Show-Step "Restoring original wallpaper..."
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -55,19 +125,32 @@ if (Test-Path $backup) {
         Set-ItemProperty "HKCU:\Control Panel\Desktop" -Name TileWallpaper -Value 0
         # SPI_SETDESKWALLPAPER=0x0014, SPIF_UPDATEINIFILE=0x01, SPIF_SENDCHANGE=0x02
         [Wallpaper]::SystemParametersInfo(0x0014, 0, $originalPath, 0x01 -bor 0x02)
-        Write-Host "Original wallpaper restored."
+        Show-OK  "Wallpaper restored: $originalPath"
     } else {
-        Write-Host "Original wallpaper path not found or file missing; wallpaper not restored."
+        Show-Warn "Backup path not found or file missing; wallpaper not restored"
     }
 } else {
-    Write-Host "No wallpaper backup found; wallpaper not restored."
+    Show-Warn "No backup file found; wallpaper not restored"
 }
 
-# Refresh Group Policy
-Write-Host "Refreshing Group Policy..."
+# ===== REFRESH GROUP POLICY =====
+Write-Host ""
+Show-Step "Refreshing Group Policy..."
 gpupdate /force | Out-Null
+Show-OK  "Group Policy refreshed"
 
 # ===== REMOVE WINGUARD FOLDER =====
+Write-Host ""
+Show-Step "Removing WinGuard installation files..."
 Remove-Item $base -Recurse -Force -ErrorAction SilentlyContinue
+Show-OK  "WinGuard folder deleted: $base"
 
-Write-Host "System restored. You can now change wallpaper."
+# ===== DONE =====
+Write-Host ""
+Write-Host "  ─────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+Write-Host "  [" -NoNewline -ForegroundColor DarkGray
+Write-Host " ✔ " -NoNewline -ForegroundColor Green
+Write-Host "] " -NoNewline -ForegroundColor DarkGray
+Write-Host "System fully restored. You can now change your wallpaper freely." -ForegroundColor Green
+Write-Host "  ─────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+Write-Host ""
